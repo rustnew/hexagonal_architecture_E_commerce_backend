@@ -1,23 +1,36 @@
-use sqlx::postgres::PgPoolOptions;
-use axum::{routing::get, Router};
-use std::{env, net::SocketAddr};
 use dotenv::dotenv;
-
-mod domain;
+use sqlx::PgPool;
+use std::env;
+use std::sync::Arc;
 mod adaptateurs;
+mod domain;
 mod ports;
-mod config;
+
+use adaptateurs::{
+        entrer::utilisateurs::init_routes as init_utilisateurs_routes,
+        sortie::utilisateurs::SqlxUtilisateurRepository,
+};
+use domain::services::utilisateurs::UtilisateurService;
+use ports::entrer::utilisateurs::UtilisateurEntree;
+
 
 #[tokio::main]
-async fn main() {
-
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+    tracing_subscriber::fmt::init();
 
-    let database_url = env::var("DATABASE_URL")
-    .expect("DATABASE_URL doit être définie dans le fichier .env");
-    println!("URL de la base de données : {}", database_url);
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPool::connect(&database_url).await?;
+    sqlx::migrate!().run(&pool).await?;
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Serveur démarré sur http://{}", addr);
+    let utilisateur_repository = SqlxUtilisateurRepository::new(pool);
+    let utilisateur_service = Arc::new(Box::new(UtilisateurService::new(utilisateur_repository)) as Box<dyn UtilisateurEntree>);
 
+    let app = init_utilisateurs_routes(utilisateur_service);
+
+    axum::Server::bind(&"0.0.0.0:8080".parse()?)
+        .serve(app.into_make_service())
+        .await?;
+
+    Ok(())
 }

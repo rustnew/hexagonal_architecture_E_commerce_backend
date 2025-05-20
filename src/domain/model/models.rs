@@ -1,217 +1,227 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
-use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Table: utilisateurs
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Utilisateur {
-    pub id: Uuid,
-    pub email: String,
-    pub mot_de_passe_hash: String,
-    pub prenom: String,
-    pub nom: String,
-    pub telephone: Option<String>,
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub email: String, // VARCHAR(255), NOT NULL, UNIQUE
+    pub mot_de_passe: String, // VARCHAR(255), NOT NULL
+    pub prenom: String, // VARCHAR(100), NOT NULL
+    pub nom: String, // VARCHAR(100), NOT NULL
     pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
-    pub est_actif: bool,
-    pub email_verifie: bool,
+    pub role :  String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Produit {
-    pub id: Uuid,
-    pub nom: String,
-    pub description: String,
-    pub description_courte: Option<String>,
-    pub reference: String,
-    pub prix: f64,
-    pub prix_comparatif: Option<f64>,
-    pub prix_revient: Option<f64>,
-    pub quantite: i32,
-    pub categorie_id: Uuid,
-    pub est_publie: bool,
-    pub est_en_vedette: bool,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+// Table: sessions
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Session {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub token: String, // VARCHAR(255), NOT NULL, UNIQUE
+    pub utilisateur_id: Option<Uuid>, // UUID, REFERENCES utilisateurs(id)
+    pub date_expiration: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Table: categories
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Categorie {
-    pub id: Uuid,
-    pub nom: String,
-    pub description: Option<String>,
-    pub categorie_parente_id: Option<Uuid>,
-    pub url_image: Option<String>,
-    pub est_active: bool,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub nom: String, // VARCHAR(50), NOT NULL
+    pub description: Option<String>, // TEXT
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageProduit {
-    pub id: Uuid,
-    pub produit_id: Uuid,
-    pub url: String,
-    pub texte_alternatif: Option<String>,
-    pub est_principale: bool,
-    pub ordre_tri: i32,
-    pub date_creation: DateTime<Utc>,
+// Table: produits
+#[derive(Debug, Clone , Serialize, Deserialize, FromRow)]
+pub struct Produit {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub nom: String, // VARCHAR(100), NOT NULL
+    pub description: String, // TEXT, NOT NULL
+    pub reference: String, // VARCHAR(50), UNIQUE, NOT NULL
+    pub prix: String, // DECIMAL(12, 2), NOT NULL, CHECK (prix > 0)
+    pub quantite: i32, // INTEGER, NOT NULL, DEFAULT 0, CHECK (quantite >= 0)
+    pub categorie_id: Option<Uuid>, // UUID, REFERENCES categories(id), ON DELETE SET NULL
+    pub image_principale_url: Option<String>, // VARCHAR(255)
+    pub est_publie: bool, // BOOLEAN, NOT NULL, DEFAULT TRUE
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Table: variantes_produit
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct VarianteProduit {
-    pub id: Uuid,
-    pub produit_id: Uuid,
-    pub nom: String,
-    pub valeur: String,
-    pub reference: Option<String>,
-    pub ajustement_prix: f64,
-    pub quantite: Option<i32>,
-    pub date_creation: DateTime<Utc>,
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub produit_id: Uuid, // UUID, NOT NULL, REFERENCES produits(id), ON DELETE CASCADE
+    pub nom: String, // VARCHAR(50), NOT NULL
+    pub valeur: String, // VARCHAR(50), NOT NULL
+    pub prix_ajuste: String, // DECIMAL(10, 2), DEFAULT 0.00
+    pub quantite: i32, // INTEGER, NOT NULL, DEFAULT 0, CHECK (quantite >= 0)
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    // UNIQUE(produit_id, nom, valeur)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TypeNotification {
-    Commande,
-    Livraison,
-    Promotion,
-    Compte,
+// Table: reviews
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Review {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub produit_id: Uuid, // UUID, NOT NULL, REFERENCES produits(id), ON DELETE CASCADE
+    pub utilisateur_id: Uuid, // UUID, NOT NULL, REFERENCES utilisateurs(id)
+    pub note: i32, // INTEGER, NOT NULL, CHECK (note >= 1 AND note <= 5)
+    pub commentaire: Option<String>, // TEXT
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    // UNIQUE(produit_id, utilisateur_id)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Notification {
-    pub id: Uuid,
-    pub utilisateur_id: Uuid,
-    pub type_notification: TypeNotification,
-    pub contenu: String,
-    pub est_lue: bool,
-    pub date_creation: DateTime<Utc>,
-    pub date_lue: Option<DateTime<Utc>>,
-    pub metadata: Option<Value>,
+// Table: wisrhlist
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Wishlist {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub utilisateur_id: Uuid, // UUID, NOT NULL, REFERENCES utilisateurs(id)
+    pub produit_id: Uuid, // UUID, NOT NULL, REFERENCES produits(id), ON DELETE CASCADE
+    pub date_ajout: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    // UNIQUE(utilisateur_id, produit_id)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Table: promotions
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Promotion {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub code: String, // VARCHAR(20), NOT NULL, UNIQUE
+    pub description: Option<String>, // TEXT
+    pub pourcentage_remise: Option<String>, // DECIMAL(5, 2), CHECK (pourcentage_remise >= 0 AND pourcentage_remise <= 100)
+    pub montant_remise: Option<String>, // DECIMAL(12, 2), CHECK (montant_remise >= 0)
+    pub date_debut: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL
+    pub date_fin: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    // CHECK (pourcentage_remise IS NOT NULL OR montant_remise IS NOT NULL)
+}
+
+// Table: methodes_paiement
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct MethodePaiement {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub nom: String, // VARCHAR(50), NOT NULL
+    pub description: Option<String>, // TEXT
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+}
+
+// Table: methodes_livraison
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct MethodeLivraison {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub nom: String, // VARCHAR(50), NOT NULL
+    pub description: Option<String>, // TEXT
+    pub cout: String, // DECIMAL(10, 2), NOT NULL, DEFAULT 0.00
+    pub delai_estime: Option<String>, // VARCHAR(50)
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+}
+
+// Table: adresses
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Adresse {
-    pub id: Uuid,
-    pub utilisateur_id: Uuid,
-    pub prenom: String,
-    pub nom: String,
-    pub ligne1: String,
-    pub ville: String,
-    pub region: String,
-    pub lieu_proche_connus: String,
-    pub quartier: String,
-    pub est_principale: bool,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub utilisateur_id: Uuid, // UUID, NOT NULL, REFERENCES utilisateurs(id)
+    pub prenom: String, // VARCHAR(100), NOT NULL
+    pub nom: String, // VARCHAR(100), NOT NULL
+    pub ligne1: String, // VARCHAR(255), NOT NULL
+    pub ville: String, // VARCHAR(100), NOT NULL
+    pub region: String, // VARCHAR(100), NOT NULL
+    pub code_postal: Option<String>, // VARCHAR(20)
+    pub pays: String, // VARCHAR(100), NOT NULL, DEFAULT 'France'
+    pub est_principale: bool, // BOOLEAN, DEFAULT FALSE
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Panier {
-    pub id: Uuid,
-    pub utilisateur_id: Option<Uuid>,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+// Table: paniers_articles
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct PanierArticle {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub utilisateur_id: Option<Uuid>, // UUID, REFERENCES utilisateurs(id)
+    pub session_id: Option<Uuid>, // UUID, REFERENCES sessions(id)
+    pub produit_id: Uuid, // UUID, NOT NULL, REFERENCES produits(id)
+    pub variante_id: Option<Uuid>, // UUID, REFERENCES variantes_produit(id)
+    pub quantite: i32, // INTEGER, NOT NULL, CHECK (quantite > 0)
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    // UNIQUE(utilisateur_id, session_id, produit_id, variante_id)
+    // CHECK (utilisateur_id IS NOT NULL OR session_id IS NOT NULL)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArticlePanier {
-    pub id: Uuid,
-    pub panier_id: Uuid,
-    pub produit_id: Uuid,
-    pub variante_id: Option<Uuid>,
-    pub quantite: i32,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+// Table: commandes
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Commande {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub utilisateur_id: Option<Uuid>, // UUID, REFERENCES utilisateurs(id)
+    pub numero_commande: String, // VARCHAR(20), UNIQUE, NOT NULL
+    pub statut: CommandeStatut, // VARCHAR(20), NOT NULL, DEFAULT 'en_attente'
+    pub montant_total: String, // DECIMAL(12, 2), NOT NULL, CHECK (montant_total >= 0)
+    pub promotion_id: Option<Uuid>, // UUID, REFERENCES promotions(id)
+    pub lieu_publique_proche: Uuid, // UUID, NOT NULL, REFERENCES adresses(id)
+    pub methode_paiement_id: Option<Uuid>, // UUID, REFERENCES methodes_paiement(id)
+    pub statut_paiement: Option<PaiementStatut>, // VARCHAR(20), DEFAULT 'en_attente'
+    pub id_transaction: Option<String>, // VARCHAR(100)
+    pub methode_livraison_id: Option<Uuid>, // UUID, REFERENCES methodes_livraison(id)
+    pub statut_livraison: Option<LivraisonStatut>, // VARCHAR(20), DEFAULT 'en_preparation'
+    pub numero_suivi: Option<String>, // VARCHAR(100)
+    pub devise: String, // VARCHAR(3), NOT NULL, DEFAULT 'EUR'
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum StatutCommande {
+// Enum for commandes.statut
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "varchar", rename_all = "snake_case")]
+pub enum CommandeStatut {
     EnAttente,
     EnTraitement,
-    EnLivraison,
+    Expediee,
     Livree,
     Annulee,
-    Retournee,
+    Remboursee,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Commande {
-    pub id: Uuid,
-    pub utilisateur_id: Option<Uuid>,
-    pub numero_commande: String,
-    pub statut: StatutCommande,
-    pub sous_total: f64,
-    pub montant_taxes: f64,
-    pub frais_livraison: f64,
-    pub montant_remise: f64,
-    pub montant_total: f64,
-    pub adresse_livraison_id: Uuid,
-    pub note: Option<String>,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArticleCommande {
-    pub id: Uuid,
-    pub commande_id: Uuid,
-    pub produit_id: Uuid,
-    pub variante_id: Option<Uuid>,
-    pub nom_produit: String,
-    pub description_variante: Option<String>,
-    pub prix: f64,
-    pub quantite: i32,
-    pub montant_remise: f64,
-    pub prix_total: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum StatutPaiement {
+// Enum for commandes.statut_paiement
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "varchar", rename_all = "snake_case")]
+pub enum PaiementStatut {
     EnAttente,
     Complete,
     Echoue,
     Remboursee,
-    PartiellementRemboursee,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Paiement {
-    pub id: Uuid,
-    pub commande_id: Uuid,
-    pub montant: f64,
-    pub methode_paiement: String,
-    pub id_transaction: Option<String>,
-    pub statut: StatutPaiement,
-    pub devise: String,
-    pub details_paiement: Option<Value>,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum StatutLivraison {
+// Enum for commandes.statut_livraison
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "varchar", rename_all = "snake_case")]
+pub enum LivraisonStatut {
     EnPreparation,
     Expediee,
     EnTransit,
-    EnLivraison,
     Livree,
-    Retournee,
-    Annulee,
-    Probleme,
+    Echouee,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Livraison {
-    pub id: Uuid,
-    pub commande_id: Uuid,
-    pub methode_livraison: String,
-    pub numero_suivi: Option<String>,
-    pub transporteur: Option<String>,
-    pub statut: StatutLivraison,
-    pub date_livraison_estimee: Option<DateTime<Utc>>,
-    pub date_livraison_reelle: Option<DateTime<Utc>>,
-    pub cout_livraison: f64,
-    pub date_creation: DateTime<Utc>,
-    pub date_mise_a_jour: DateTime<Utc>,
+// Table: articles_commande
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct ArticleCommande {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub commande_id: Uuid, // UUID, NOT NULL, REFERENCES commandes(id), ON DELETE CASCADE
+    pub produit_id: Uuid, // UUID, NOT NULL, REFERENCES produits(id)
+    pub variante_id: Option<Uuid>, // UUID, REFERENCES variantes_produit(id)
+    pub nom_produit: String, // VARCHAR(255), NOT NULL
+    pub prix_unitaire: String, // DECIMAL(12, 2), NOT NULL, CHECK (prix_unitaire >= 0)
+    pub quantite: i32, // INTEGER, NOT NULL, CHECK (quantite > 0)
+    pub prix_total: String, // DECIMAL(12, 2), NOT NULL, CHECK (prix_total >= 0)
+}
+
+// Table: notifications
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Notification {
+    pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
+    pub utilisateur_id: Uuid, // UUID, NOT NULL, REFERENCES utilisateurs(id)
+    pub type_notification: String, // VARCHAR(50), NOT NULL
+    pub contenu: String, // TEXT, NOT NULL
+    pub est_lue: bool, // BOOLEAN, NOT NULL, DEFAULT FALSE
+    pub date_creation: DateTime<Utc>, // TIMESTAMPTZ, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+    pub metadata: Option<serde_json::Value>, // JSONB
 }
