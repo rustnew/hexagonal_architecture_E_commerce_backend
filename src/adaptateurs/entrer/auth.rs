@@ -1,9 +1,9 @@
-use axum::{
-    extract::Extension,
-    http::Request,
-    middleware::Next,
-    response::Response,
+use actix_web::{
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    Error, HttpMessage,
+    web::Data,
 };
+use futures_util::future::{ready, LocalBoxFuture, Ready};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -22,57 +22,133 @@ pub struct Claims {
     pub exp: usize,  // Expiration
 }
 
-pub async fn auth_middleware<T>(
-    Extension(repository): Extension<Arc<Box<dyn UtilisateurSortie>>>,
-    mut req: Request<T>,
-    next: Next<T>,
-) -> Result<Response, MyError> {
-    let auth_header = req
-        .headers()
-        .get("Authorization")
-        .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| MyError::Unauthorized("Missing Authorization header".to_string()))?;
-
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| MyError::Unauthorized("Invalid Authorization header format".to_string()))?;
-
-    let jwt_secret = env::var("JWT_SECRET").map_err(|_| MyError::Custom("JWT_SECRET not set".to_string()))?;
-
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(jwt_secret.as_ref()),
-        &Validation::new(jsonwebtoken::Algorithm::HS256),
-    )
-    .map_err(|e| MyError::Unauthorized(format!("Invalid token: {}", e)))?;
-
-    if !["utilisateur", "gerant"].contains(&token_data.claims.role.as_str()) {
-        return Err(MyError::Unauthorized("Invalid role".to_string()));
+pub fn auth_middleware<S>(
+    repository: Arc<Box<dyn UtilisateurSortie>>,
+) -> impl Transform<
+    S,
+    ServiceRequest,
+    Response = ServiceResponse,
+    Error = Error,
+    InitError = (),
+> where
+    S: Service<
+            ServiceRequest,
+            Response = ServiceResponse,
+            Error = Error,
+        > + 'static + std::clone::Clone,
+    S::Future: 'static,
+{
+    AuthMiddleware {
+        repository: Data::new(repository),
+        _phantom: std::marker::PhantomData,
     }
+}
 
-    let user_id = Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| MyError::Unauthorized("Invalid user ID".to_string()))?;
+pub struct AuthMiddleware<S> {
+    repository: Data<Arc<Box<dyn UtilisateurSortie>>>,
+    _phantom: std::marker::PhantomData<S>,
+}
 
-    let utilisateur = repository
-        .obtenir_par_id(user_id)
-        .await?
-        .ok_or_else(|| MyError::Unauthorized("User not found".to_string()))?;
+impl<S> Transform<S, ServiceRequest> for AuthMiddleware<S>
+where
+    S: Service<
+            ServiceRequest,
+            Response = ServiceResponse,
+            Error = Error,
+        > + 'static + std::clone::Clone,
+    S::Future: 'static,
+{
+    type Response = ServiceResponse;
+    type Error = Error;
+    type InitError = ();
+    type Transform = AuthMiddlewareService<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
-    if utilisateur.role != token_data.claims.role {
-        return Err(MyError::Unauthorized("Role mismatch".to_string()));
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(AuthMiddlewareService {
+            service,
+            repository: self.repository.clone(),
+        }))
     }
+}
 
-    let path = req.uri().path();
-    let restricted_paths = ["/utilisateurs", "/utilisateurs/:id/role"];
-    if restricted_paths.iter().any(|p| path.starts_with(p)) && token_data.claims.role != "gerant" {
-        warn!("Accès non autorisé à {} par utilisateur avec rôle {}", path, token_data.claims.role);
-        return Err(MyError::Unauthorized("Seul un gérant peut accéder à ce service".to_string()));
+pub struct AuthMiddlewareService<S> {
+    service: S,
+    repository: Data<Arc<Box<dyn UtilisateurSortie>>>,
+}
+
+impl<S> Service<ServiceRequest> for AuthMiddlewareService<S>
+where
+    S: Service<
+            ServiceRequest,
+            Response = ServiceResponse,
+            Error = Error,
+        > + 'static + Clone, // Added Clone bound
+    S::Future: 'static,
+{
+    type Response = ServiceResponse;
+    type Error = Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let repository = self.repository.clone();
+        let service = self.service.clone(); // Clone service to own it
+        let auth_result = async move {
+            let auth_header = req
+                .headers()
+                .get("Authorization")
+                .and_then(|header| header.to_str().ok())
+                .ok_or_else(|| MyError::Unauthorized("Missing Authorization header".to_string()))?;
+
+            let token = auth_header
+                .strip_prefix("Bearer ")
+                .ok_or_else(|| MyError::Unauthorized("Invalid Authorization header format".to_string()))?;
+
+            let jwt_secret = env::var("JWT_SECRET").map_err(|_| MyError::Custom("JWT_SECRET not set".to_string()))?;
+
+            let token_data = decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(jwt_secret.as_ref()),
+                &Validation::new(jsonwebtoken::Algorithm::HS256),
+            )
+            .map_err(|e| MyError::Unauthorized(format!("Invalid token: {}", e)))?;
+
+            if !["utilisateur", "gerant"].contains(&token_data.claims.role.as_str()) {
+                return Err(MyError::Unauthorized("Invalid role".to_string()));
+            }
+
+            let user_id = Uuid::parse_str(&token_data.claims.sub)
+                .map_err(|_| MyError::Unauthorized("Invalid user ID".to_string()))?;
+
+            let utilisateur = repository
+                .obtenir_par_id(user_id)
+                .await?
+                .ok_or_else(|| MyError::Unauthorized("User not found".to_string()))?;
+
+            if utilisateur.role != token_data.claims.role {
+                return Err(MyError::Unauthorized("Role mismatch".to_string()));
+            }
+
+            let path = req.path();
+            let restricted_paths = ["/utilisateurs", "/utilisateurs/{id}/role"];
+            if restricted_paths.iter().any(|p| path.starts_with(p)) && token_data.claims.role != "gerant" {
+                warn!("Accès non autorisé à {} par utilisateur avec rôle {}", path, token_data.claims.role);
+                return Err(MyError::Unauthorized("Seul un gérant peut accéder à ce service".to_string()));
+            }
+
+            req.extensions_mut().insert(utilisateur);
+            req.extensions_mut().insert(token_data.claims.role);
+
+            Ok(req)
+        };
+
+        Box::pin(async move {
+            let req = auth_result.await.map_err(|e| actix_web::Error::from(e))?;
+            service.call(req).await // Use cloned service
+        })
     }
-
-    req.extensions_mut().insert(utilisateur);
-    req.extensions_mut().insert(token_data.claims.role);
-
-    Ok(next.run(req).await)
 }
 
 pub async fn generate_jwt(user: &Utilisateur) -> Result<String, MyError> {

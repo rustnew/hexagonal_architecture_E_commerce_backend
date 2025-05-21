@@ -1,36 +1,32 @@
+use actix_web::{App, HttpServer};
 use dotenv::dotenv;
-use sqlx::PgPool;
 use std::env;
 use std::sync::Arc;
-mod adaptateurs;
+use tracing_subscriber;
 mod domain;
 mod ports;
+mod adaptateurs;
 
-use adaptateurs::{
-        entrer::utilisateurs::init_routes as init_utilisateurs_routes,
-        sortie::utilisateurs::SqlxUtilisateurRepository,
-};
-use domain::services::utilisateurs::UtilisateurService;
-use ports::entrer::utilisateurs::UtilisateurEntree;
+use crate::adaptateurs::entrer::utilisateurs::create_utilisateur;
+use crate::adaptateurs::sortie::utilisateurs::SqlxUtilisateurRepository;
+use crate::domain::services::utilisateurs::UtilisateurService;
 
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     dotenv().ok();
     tracing_subscriber::fmt::init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pool = PgPool::connect(&database_url).await?;
-    sqlx::migrate!().run(&pool).await?;
+    let pool = sqlx::PgPool::connect(&database_url).await.expect("Failed to connect to database");
 
     let utilisateur_repository = SqlxUtilisateurRepository::new(pool);
-    let utilisateur_service = Arc::new(Box::new(UtilisateurService::new(utilisateur_repository)) as Box<dyn UtilisateurEntree>);
-
-    let app = init_utilisateurs_routes(utilisateur_service);
-
-    axum::Server::bind(&"0.0.0.0:8080".parse()?)
-        .serve(app.into_make_service())
-        .await?;
-
-    Ok(())
+    
+    tracing::info!("Starting server on 0.0.0.0:8080");
+    HttpServer::new(move || {
+        App::new()
+            .service(create_utilisateur)
+    })
+    .bind("0.0.0.0:8080")?
+    .run()
+    .await
 }

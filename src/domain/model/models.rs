@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 // Table: utilisateurs
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, PartialEq, Eq)]
 pub struct Utilisateur {
     pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
     pub email: String, // VARCHAR(255), NOT NULL, UNIQUE
@@ -16,7 +16,7 @@ pub struct Utilisateur {
 }
 
 // Table: sessions
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, PartialEq, Eq)]
 pub struct Session {
     pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
     pub token: String, // VARCHAR(255), NOT NULL, UNIQUE
@@ -26,7 +26,7 @@ pub struct Session {
 }
 
 // Table: categories
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone,  FromRow)]
 pub struct Categorie {
     pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
     pub nom: String, // VARCHAR(50), NOT NULL

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = "0.6.18"
+
 tower = "0.4.13"
 tower-http = { version = "0.4.0", features = ["cors", "trace", "compression-gzip"] }
 tokio = { version = "1.28.2", features = ["full"] }
@@ -29,3 +29,6 @@ async-trait = "0.1.68"
 futures = "0.3.28"
 mockall = "0.11.4"
 bcrypt = "0.17.0"
+axum = "0.8.4"
+actix-web = "4.11.0"
+futures-util = "0.3.31"
