@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+
 // Table: utilisateurs
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, PartialEq, Eq)]
-pub struct Utilisateur {
+pub struct User {
     pub id: Uuid, // PRIMARY KEY, DEFAULT uuid_generate_v4()
     pub email: String, // VARCHAR(255), NOT NULL, UNIQUE
     pub mot_de_passe: String, // VARCHAR(255), NOT NULL

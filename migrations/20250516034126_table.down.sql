@@ -1,21 +1,19 @@
--- Add down migration script here
 -- Suppression des tables dans l'ordre inverse des dépendances
-
-DROP TABLE IF EXISTS notifications;
-DROP TABLE IF EXISTS articles_commande;
-DROP TABLE IF EXISTS commandes;
-DROP TABLE IF EXISTS paniers_articles;
-DROP TABLE IF EXISTS adresses;
-DROP TABLE IF EXISTS methodes_livraison;
-DROP TABLE IF EXISTS methodes_paiement;
-DROP TABLE IF EXISTS promotions;
-DROP TABLE IF EXISTS wishlist;
-DROP TABLE IF EXISTS reviews;
-DROP TABLE IF EXISTS variantes_produit;
-DROP TABLE IF EXISTS produits;
-DROP TABLE IF EXISTS categories;
-DROP TABLE IF EXISTS sessions;
-DROP TABLE IF EXISTS utilisateurs;
+DROP TABLE notifications;
+DROP TABLE order_items;
+DROP TABLE orders;
+DROP TABLE cart_items;
+DROP TABLE addresses;
+DROP TABLE delivery_methods;
+DROP TABLE payment_methods;
+DROP TABLE promotions;
+DROP TABLE wishlist;
+DROP TABLE reviews;
+DROP TABLE product_variants;
+DROP TABLE products;
+DROP TABLE categories;
+DROP TABLE sessions;
+DROP TABLE utilisateur;
 
 -- Désactiver l'extension UUID
 DROP EXTENSION IF EXISTS "uuid-ossp";
